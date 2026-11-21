@@ -1,0 +1,59 @@
+{
+  "format": "batterydisplay-device-pack",
+  "version": 1,
+  "devices": [
+    {
+      "key": "aula-f108-pro",
+      "name": "狼蛛 F108 Pro",
+      "type": "keyboard",
+      "transport": {
+        "type": "hid",
+        "io": "output_input",
+        "report_bytes": 33
+      },
+      "match": {
+        "vid": "0x05AC",
+        "pid": "0x024F",
+        "interface": 3,
+        "usage_page": "0xFF60",
+        "usage": "0x0061",
+        "product_string": "F108Pro Dongle"
+      },
+      "read": {
+        "query": [
+          "00 20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 21"
+        ],
+        "checksum": {
+          "mode": "sum_all",
+          "at": 32,
+          "range": [0, 31]
+        },
+        "attempts": 3,
+        "poke_interval_ms": 120,
+        "listen_ms": 2500,
+        "reply": {
+          "contains": ["20 01"],
+          "battery": {
+            "byte": 3
+          },
+          "range": [0, 100]
+        }
+      },
+      "verified": {
+        "date": "2026-11-21",
+        "samples": [89, 89, 89],
+        "raw_reply": "20 01 00 59 00 00 00 00 00 00 00 00"
+      },
+      "notes": [
+        "只在 2.4G 模式下可用；有线模式下键盘不报电量，且它的 dongle 接口会消失（线只能充电）",
+        "33 字节 output report：report ID 0 + 命令字 + 末字节为前面所有字节之和的低 8 位",
+        "命令 20 01，回包 20 01 00 LEVEL …，LEVEL（第 3 字节）即电量百分比",
+        "键盘休眠时不应答：单次查询经常收不到回包，需每 120ms 连发 3 次唤醒后再等最多 2.5 秒",
+        "无充电状态字段，官方协议不提供",
+        "伪装成苹果键盘（05AC:024F）以获 Mac 免驱，Linux 需打 hid-apple 白名单补丁",
+        "协议参考：donglover69/sonix-keyboard-studio（原生 MFC 驱动逆向）、krisgfx9/Wireless-Device-Battery-Monitor",
+        "同一 SONiX 协议族覆盖 AJAZZ AK820 MAX / AK980 V2 / AK820 Pro、EPOMAKER 多款，加设备多半只改 VID/PID"
+      ]
+    }
+  ]
+}

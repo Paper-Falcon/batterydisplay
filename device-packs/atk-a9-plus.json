@@ -1,0 +1,58 @@
+{
+  "format": "batterydisplay-device-pack",
+  "version": 1,
+  "devices": [
+    {
+      "key": "atk-a9-plus",
+      "name": "ATK 蜻蜓 A9 Plus",
+      "type": "mouse",
+      "transport": {
+        "type": "hid",
+        "io": "output_input"
+      },
+      "match": {
+        "vid": "0x373B",
+        "pid": "0x1216",
+        "usage_page": "0xFF05",
+        "interface": 2,
+        "product_string": "NK mouse NANO dongle"
+      },
+      "read": {
+        "query": ["08 7D 72 02 00 01 07 01"],
+        "pad_to": 64,
+        "checksum": {
+          "mode": "none"
+        },
+        "attempts": 3,
+        "listen_ms": 800,
+        "reply": {
+          "contains": ["72 00 05"],
+          "battery": {
+            "byte": 7
+          },
+          "range": [1, 100],
+          "aux": {
+            "voltage": {
+              "byte": 8,
+              "bytes": 2,
+              "order": "little",
+              "scale": 0.001
+            }
+          }
+        }
+      },
+      "verified": {
+        "date": "2026-11-21",
+        "samples": [[58, 3.952], [58, 3.952], [58, 3.952], [58, 3.952]],
+        "raw_reply": "08 72 00 05 00 07 01 3A 70 0F 00 00 ..."
+      },
+      "notes": [
+        "query 的第一个字节 08 是 HID Report ID，必须原样发送",
+        "Feature Report (HidD_GetFeature) 在该接口上不可用，必须走 write + read 的中断传输",
+        "interface 1 的 usage_page 0xFFB3 与 interface 2 的 0xFFB1 发送后无回包",
+        "电量与电压两个字段互相印证：0x3A=58%，0x0F70 小端=3952mV",
+        "2026-11-21 实测 4 次读数完全稳定，尚未与 ATK HUB 界面显示值做交叉核对"
+      ]
+    }
+  ]
+}
