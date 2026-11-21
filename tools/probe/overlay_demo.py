@@ -297,6 +297,7 @@ def main():
     pad = 12
     box = (x - pad, y - 6, x + img.size[0] + pad, y + img.size[1] + 6)
     shot = ImageGrab.grab(bbox=box)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     shot.save(args.out)
     print(f"已截图: {args.out}  ({shot.size[0]}×{shot.size[1]})")
 

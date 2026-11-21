@@ -287,6 +287,7 @@ class App:
 
 def selftest(path="tmp/app_selftest.png"):
     """显示叠加层并截图，便于无人值守验证渲染是否正常。"""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)   # tmp/ 可能已被清理
     app = App()
     app.refresh()
     time.sleep(1.0)
