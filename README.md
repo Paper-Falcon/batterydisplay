@@ -42,6 +42,25 @@ python src/prototype/app.py
 
 日志位置：`%LOCALAPPDATA%\BatteryDisplay\app.log`（后台程序没有控制台，这是唯一排错手段）。
 
+### 开机自启
+
+已写入注册表：
+
+```
+HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+  BatteryDisplay = "<pythonw.exe 绝对路径>" "<app.py 绝对路径>"
+```
+
+- 不需要管理员权限，不触发 UAC
+- 值里用的是**绝对路径**，不依赖启动目录（已验证从 `C:\Windows` 启动也能正常读设备）
+- 程序带**单实例保护**：自启后再手动双击不会跑出第二份，日志会记一条"已有实例在运行"
+
+关闭方式（任选）：
+
+1. 任务管理器 → 启动应用 → 右键 `BatteryDisplay` → 禁用
+2. 或者删除注册表值：
+   `Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name BatteryDisplay`
+
 ## 工作原理
 
 ```

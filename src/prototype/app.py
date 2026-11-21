@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import traceback
+import ctypes
 
 import pystray
 from PIL import Image, ImageDraw, ImageFont
@@ -25,6 +26,24 @@ import overlay
 
 REFRESH_SECONDS = 60
 TICK_SECONDS = 1.5
+
+_ERROR_ALREADY_EXISTS = 183
+_instance_mutex = None
+
+
+def acquire_single_instance():
+    """全局互斥，防止开机自启 + 手动双击跑出两个实例。
+
+    两个实例会画两层叠加文字、出现两个托盘图标，很难看出是重复启动。
+    返回 True 表示本进程是唯一实例。
+    """
+    global _instance_mutex
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        _instance_mutex = kernel32.CreateMutexW(None, False, "Local\\BatteryDisplay_SingleInstance")
+        return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
+    except Exception:
+        return True   # 互斥创建失败时不阻止启动，宁可多开也不要打不开
 
 
 def _log_path():
@@ -302,6 +321,10 @@ def main():
 
         if "--selftest" in args:
             selftest()
+            return
+
+        if not acquire_single_instance():
+            _log("已有实例在运行，本次启动退出")
             return
 
         App(show_overlay="--no-overlay" not in args).run()
