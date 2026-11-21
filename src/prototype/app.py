@@ -12,6 +12,7 @@
 """
 
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -23,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 import engine
 import overlay
+import settings
 
 REFRESH_SECONDS = 60
 TICK_SECONDS = 1.5
@@ -112,7 +114,11 @@ class App:
             for d in self.readable
         }
         self.overlay = overlay.Overlay()
-        self.show_overlay = show_overlay
+        self.cfg = settings.load()
+        # 命令行 --no-overlay 是硬开关，配置里的开关不能把它顶掉
+        self.overlay_cli_disabled = not show_overlay
+        self.show_overlay = self.cfg["overlay_enabled"] and not self.overlay_cli_disabled
+        self.cfg_mtime = self._cfg_mtime()
         self.cached_img = None
         self.cached_pos = None
         self.stop = False
@@ -142,10 +148,10 @@ class App:
     def check_alert(self, st):
         """越过阈值弹一次；一次掉穿多个阈值也只弹一条。"""
         level = st["level"]
-        if level is None or st["status"] != "ok":
+        if level is None or st["status"] != "ok" or not self.cfg["alerts_enabled"]:
             return
 
-        newly = [th for th in ALERT_THRESHOLDS
+        newly = [th for th in self.cfg["alert_thresholds"]
                  if level <= th and th not in st["alerted"]]
         if newly:
             st["alerted"].update(newly)
@@ -167,10 +173,40 @@ class App:
     def strip_items(self):
         items = []
         for st in self.state.values():
+            # 接收器已经拔掉了，就不要在任务栏留残影
+            if st["status"] == "offline":
+                continue
             kind = st["kind"] if st["kind"] in ("keyboard", "mouse") else "other"
             stale = st["status"] != "ok" and st["level"] is not None
             items.append((kind, st["level"], stale))
         return items
+
+    # ── 配置 ──
+    def _cfg_mtime(self):
+        try:
+            return os.path.getmtime(settings.path())
+        except OSError:
+            return 0
+
+    def reload_settings_if_changed(self):
+        """控制面板是独立进程，靠文件 mtime 感知变更。"""
+        mtime = self._cfg_mtime()
+        if mtime == self.cfg_mtime:
+            return
+        self.cfg_mtime = mtime
+        self.cfg = settings.load()
+        self.show_overlay = self.cfg["overlay_enabled"] and not self.overlay_cli_disabled
+        self.cached_pos = None      # 字号可能变了，强制重画
+        self.render()
+        self.update_tray()
+
+    def open_settings(self, *_):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "settings_window.py")
+        try:
+            subprocess.Popen([sys.executable, script])
+        except Exception:
+            pass
 
     # ── 显示 ──
     def render(self):
@@ -181,7 +217,16 @@ class App:
             self.overlay.hide()
             return
 
-        img = overlay.render_strip(self.strip_items(), dpi_scale=metrics["dpi_scale"])
+        items = self.strip_items()
+        if not items:
+            # 一台在线的设备都没有，整条都别显示
+            self.overlay.hide()
+            self.cached_img = None
+            self.cached_pos = None
+            return
+
+        img = overlay.render_strip(items, font_size=self.cfg["font_size"],
+                                  dpi_scale=metrics["dpi_scale"])
         self.cached_img = img
         self.place(img, metrics)
 
@@ -202,6 +247,7 @@ class App:
 
     def tick(self):
         """轻量轮询：只处理位置/可见性变化，不重新读设备。"""
+        self.reload_settings_if_changed()
         metrics = overlay.taskbar_metrics()
         if not metrics:
             return
@@ -214,7 +260,8 @@ class App:
 
     # ── 托盘 ──
     def lowest_level(self):
-        levels = [s["level"] for s in self.state.values() if s["level"] is not None]
+        levels = [s["level"] for s in self.state.values()
+                  if s["level"] is not None and s["status"] != "offline"]
         return min(levels) if levels else None
 
     def tooltip(self):
@@ -247,6 +294,7 @@ class App:
                 f"{len(self.unsupported)} 台设备不提供电量", None, enabled=False))
 
         items.append(pystray.Menu.SEPARATOR)
+        items.append(pystray.MenuItem("控制面板…", self.open_settings))
         items.append(pystray.MenuItem(
             "隐藏任务栏文字" if self.show_overlay else "显示任务栏文字",
             self.toggle_overlay))
@@ -288,7 +336,7 @@ class App:
             try:
                 if now >= next_refresh:
                     self.refresh()
-                    next_refresh = now + REFRESH_SECONDS
+                    next_refresh = now + self.cfg["refresh_seconds"]
                 else:
                     self.tick()
             except Exception as e:

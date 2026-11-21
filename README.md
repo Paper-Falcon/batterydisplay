@@ -27,6 +27,7 @@
 
 - **任务栏常驻显示** —— 图标 + 百分比，余光一扫就能看到
 - **低电量提醒** —— 降到 20% 弹一次、10% 再弹一次；充电回升后自动重新武装，不会反复骚扰
+- **控制面板** —— 托盘右键打开，可调字号、刷新间隔、提醒阈值、开机自启，改完立即生效
 - **休眠不唤醒** —— 设备睡了不去叫醒它，显示上次读数并降低透明度
 - **全屏自动隐藏** —— 看电影、打游戏时不挡画面
 - **托盘图标** —— 显示最低电量，右键看全部设备
@@ -72,7 +73,12 @@ python src/prototype/app.py
 | `python src/prototype/app.py --once` | 只读一次，打印结果 |
 | `python src/prototype/app.py --selftest` | 显示叠加层并截图，验证渲染 |
 | `python src/prototype/app.py --test-alert` | 弹两条测试通知，验证低电量提醒 |
+| `python src/prototype/settings_window.py` | 单独打开控制面板 |
 | `python tools/probe/read_packs.py` | 命令行读取全部设备 |
+
+配置存在 `%LOCALAPPDATA%\BatteryDisplay\settings.json`，也可以直接用记事本改；
+主程序会监听文件变化自动生效，不用重启。控制面板做成独立进程，
+避免 Tkinter 和托盘的消息循环抢主线程。
 
 日志：只在**未捕获异常**时写 `%LOCALAPPDATA%\BatteryDisplay\crash.log`。
 不写常规运行日志——后台程序用 pythonw 启动没有控制台，崩溃时会完全无声，这份崩溃栈是唯一的线索。
