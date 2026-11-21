@@ -226,7 +226,8 @@ class App:
             return
 
         img = overlay.render_strip(items, font_size=self.cfg["font_size"],
-                                  dpi_scale=metrics["dpi_scale"])
+                                  dpi_scale=metrics["dpi_scale"],
+                                  thresholds=self.cfg["alert_thresholds"])
         self.cached_img = img
         self.place(img, metrics)
 

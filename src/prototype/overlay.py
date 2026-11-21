@@ -31,6 +31,20 @@ AC_SRC_ALPHA = 0x01
 
 FG = (255, 255, 255, 255)
 HALO = (0, 0, 0, 220)
+WARN = (255, 196, 84, 255)     # 越过较高阈值：琥珀色
+DANGER = (255, 96, 96, 255)    # 越过最低阈值：红色
+
+
+def _level_color(level, thresholds):
+    """电量正常时用白色，低了才变色 —— 颜色要稀缺才有信号意义。"""
+    if level is None or not thresholds:
+        return FG
+    ths = sorted(thresholds, reverse=True)
+    if level <= ths[-1]:
+        return DANGER
+    if level <= ths[0]:
+        return WARN
+    return FG
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -92,10 +106,11 @@ def _alpha(c, factor):
     return (c[0], c[1], c[2], int(c[3] * factor))
 
 
-def render_strip(items, font_size=15, dpi_scale=1.0):
+def render_strip(items, font_size=15, dpi_scale=1.0, thresholds=(20, 10)):
     """items = [(kind, level)] 或 [(kind, level, dim)] → 透明条 RGBA。
 
     dim=True 的那一项会整体降透明度 —— 表示"这是上次读数，现在读不到"。
+    level 低于 thresholds 时文字与图标变琥珀/红色，余光就能察觉。
     dpi_scale=1.25 时输出尺寸放大 25%，保证高 DPI 下不模糊。
     """
     u = SCALE * dpi_scale          # 长度单位
@@ -135,7 +150,8 @@ def render_strip(items, font_size=15, dpi_scale=1.0):
     cx = pad_x
     for i, (kind, level, dim) in enumerate(items):
         f = 0.45 if dim else 1.0
-        fg, halo = _alpha(FG, f), _alpha(HALO, f)
+        color = _level_color(level, thresholds)
+        fg, halo = _alpha(color, f), _alpha(HALO, f)
 
         iy = (total_h - ICON_H[kind] * u) / 2
         draw_icon(d, kind, cx, iy, u, fg=fg, halo=halo)
