@@ -27,6 +27,11 @@ import overlay
 REFRESH_SECONDS = 60
 TICK_SECONDS = 1.5
 
+# 低电量提醒：电量越过阈值时弹一次通知。
+# 回升到「阈值 + 余量」以上才重新武装，避免在边界反复弹窗。
+ALERT_THRESHOLDS = (20, 10)
+ALERT_REARM_MARGIN = 5
+
 _ERROR_ALREADY_EXISTS = 183
 _instance_mutex = None
 
@@ -46,24 +51,17 @@ def acquire_single_instance():
         return True   # 互斥创建失败时不阻止启动，宁可多开也不要打不开
 
 
-def _log_path():
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    folder = os.path.join(base, "BatteryDisplay")
+def _write_crash(text):
+    """只在未捕获异常时留一份痕迹，不写常规运行日志。
+
+    后台程序用 pythonw 启动时没有控制台，崩了会完全无声无息。
+    """
     try:
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        folder = os.path.join(base, "BatteryDisplay")
         os.makedirs(folder, exist_ok=True)
-    except Exception:
-        return None
-    return os.path.join(folder, "app.log")
-
-
-def _log(msg):
-    """后台程序没有控制台，日志是唯一的排错手段。"""
-    path = _log_path()
-    if not path:
-        return
-    try:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+        with open(os.path.join(folder, "crash.log"), "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}]\n{text}\n")
     except Exception:
         pass
 
@@ -109,6 +107,7 @@ class App:
                 "status": "idle",
                 "detail": "等待读取",
                 "ts": 0.0,
+                "alerted": set(),      # 已经弹过提醒的阈值
             }
             for d in self.readable
         }
@@ -134,12 +133,36 @@ class App:
                 else:
                     st["status"] = res["status"]
                     st["detail"] = res["detail"]
+                self.check_alert(st)
             # 逐台刷新显示：先读到的先出现，不必等全部读完
             self.render()
         self.update_tray()
-        _log("刷新 | " + " ".join(
-            f"{s['name'].split()[0]}={s['level']}({s['status']})"
-            for s in self.state.values()))
+
+    # ── 低电量提醒 ──
+    def check_alert(self, st):
+        """越过阈值弹一次；一次掉穿多个阈值也只弹一条。"""
+        level = st["level"]
+        if level is None or st["status"] != "ok":
+            return
+
+        newly = [th for th in ALERT_THRESHOLDS
+                 if level <= th and th not in st["alerted"]]
+        if newly:
+            st["alerted"].update(newly)
+            self.notify_low(st["name"], level)
+
+        # 充电回升后重新武装，留 5% 余量防止在阈值上反复弹
+        for th in list(st["alerted"]):
+            if level > th + ALERT_REARM_MARGIN:
+                st["alerted"].discard(th)
+
+    def notify_low(self, name, level):
+        if not self.icon:
+            return
+        try:
+            self.icon.notify(f"{name} 电量仅剩 {level}%，该充电了", "电量偏低")
+        except Exception:
+            pass
 
     def strip_items(self):
         items = []
@@ -305,9 +328,28 @@ def selftest(path="tmp/app_selftest.png"):
     return app
 
 
+def test_alert():
+    """弹两条低电量通知，用于验证提醒效果（不需要真的等到掉电）。"""
+    app = App()
+    app.icon = pystray.Icon(
+        "BatteryDisplay", badge_image(9), "BatteryDisplay 提醒测试",
+        pystray.Menu(pystray.MenuItem("退出", lambda *_: app.quit())))
+    try:
+        app.icon.run_detached()
+    except Exception:
+        threading.Thread(target=app.icon.run, daemon=True).start()
+
+    time.sleep(1.2)
+    for name, lv in (("键盘", 18), ("鼠标", 8)):
+        app.notify_low(name, lv)
+        time.sleep(0.6)
+    print("已发出 2 条测试通知：键盘 18%、鼠标 8%")
+    time.sleep(4)
+    app.quit()
+
+
 def main():
     args = sys.argv[1:]
-    _log(f"启动 | 解释器={sys.executable} | 参数={args or '(无)'}")
 
     try:
         if "--once" in args:
@@ -324,13 +366,16 @@ def main():
             selftest()
             return
 
-        if not acquire_single_instance():
-            _log("已有实例在运行，本次启动退出")
+        if "--test-alert" in args:
+            test_alert()
             return
+
+        if not acquire_single_instance():
+            return   # 已有实例在跑，静默退出
 
         App(show_overlay="--no-overlay" not in args).run()
     except Exception:
-        _log("崩溃:\n" + traceback.format_exc())
+        _write_crash(traceback.format_exc())
         raise
 
 

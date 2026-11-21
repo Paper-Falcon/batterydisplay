@@ -23,6 +23,18 @@
 
 ---
 
+## 功能
+
+- **任务栏常驻显示** —— 图标 + 百分比，余光一扫就能看到
+- **低电量提醒** —— 降到 20% 弹一次、10% 再弹一次；充电回升后自动重新武装，不会反复骚扰
+- **休眠不唤醒** —— 设备睡了不去叫醒它，显示上次读数并降低透明度
+- **全屏自动隐藏** —— 看电影、打游戏时不挡画面
+- **托盘图标** —— 显示最低电量，右键看全部设备
+- **开机自启 + 单实例** —— 不会跑出两份
+
+
+---
+
 ## 支持情况
 
 | 设备 | 连接 | 协议 | 状态 |
@@ -59,10 +71,11 @@ python src/prototype/app.py
 | `run_silent.vbs` | 无窗口启动 |
 | `python src/prototype/app.py --once` | 只读一次，打印结果 |
 | `python src/prototype/app.py --selftest` | 显示叠加层并截图，验证渲染 |
+| `python src/prototype/app.py --test-alert` | 弹两条测试通知，验证低电量提醒 |
 | `python tools/probe/read_packs.py` | 命令行读取全部设备 |
 
-日志：`%LOCALAPPDATA%\BatteryDisplay\app.log`
-后台程序没有控制台，这是唯一的排错手段（记录启动、每次刷新、崩溃堆栈）。
+日志：只在**未捕获异常**时写 `%LOCALAPPDATA%\BatteryDisplay\crash.log`。
+不写常规运行日志——后台程序用 pythonw 启动没有控制台，崩溃时会完全无声，这份崩溃栈是唯一的线索。
 
 ### 开机自启
 
@@ -222,3 +235,9 @@ docs/              技术方案与完整逆向记录
 - [Wireless-Device-Battery-Monitor](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) —— 大量国产外设的电量协议清单
 - [f75-linux-manager](https://github.com/harshvats17/f75-linux-manager) —— 同一接收器的 Linux 实现与结论
 - [TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) —— Win11 任务栏叠加的可行做法
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 Paper-Falcon
