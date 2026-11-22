@@ -156,6 +156,13 @@ class Panel:
 
 
 def main():
+    # 与主程序一致：声明 DPI 感知，否则高缩放下界面会被系统拉伸发虚
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        pass
+
     root = tk.Tk()
     Panel(root)
     root.update_idletasks()

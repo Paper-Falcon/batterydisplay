@@ -175,5 +175,69 @@ class StripItemsTest(unittest.TestCase):
         self.assertEqual(a.lowest_level(), 58)
 
 
+class PlaceTest(unittest.TestCase):
+    """回归：位置没变也必须把新画面推上去，否则电量会一直卡在旧值。"""
+
+    class _StubOverlay:
+        def __init__(self):
+            self.visible = False
+            self.shown = []
+
+        def show(self, img, x, y):
+            self.shown.append((getattr(img, "tag", None), x, y))
+            self.visible = True
+
+        def hide(self):
+            self.visible = False
+
+    def _app(self):
+        a = _bare_app()
+        a.overlay = self._StubOverlay()
+        a.cached_img = None
+        a.cached_pos = None
+        a.img_version = 0
+        a.placed_version = -1
+        return a
+
+    METRICS = {"tray_left": 2283, "left": 0, "width": 2560, "top": 1392,
+               "height": 48, "apps_right": 1346, "dpi_scale": 1.0,
+               "hidden": False, "visible": True}
+
+    def _img(self, tag):
+        from PIL import Image
+        im = Image.new("RGBA", (89, 26), (0, 0, 0, 0))
+        im.tag = tag
+        return im
+
+    def test_位置不变时新画面仍会推送(self):
+        a = self._app()
+
+        a.img_version += 1
+        a.place(self._img("first"), self.METRICS)
+        self.assertEqual(len(a.overlay.shown), 1)
+
+        a.img_version += 1                 # 电量变了，重新渲染
+        a.place(self._img("second"), self.METRICS)
+        self.assertEqual(len(a.overlay.shown), 2)
+        self.assertEqual(a.overlay.shown[-1][0], "second")
+
+    def test_同版本重复调用才跳过(self):
+        a = self._app()
+        img = self._img("same")
+
+        a.img_version += 1
+        a.place(img, self.METRICS)
+        a.place(img, self.METRICS)          # 版本没涨 → 跳过
+        self.assertEqual(len(a.overlay.shown), 1)
+
+    def test_位置变化会重新推送(self):
+        a = self._app()
+        a.img_version += 1
+        a.place(self._img("a"), self.METRICS)
+        moved = dict(self.METRICS, tray_left=2200)
+        a.place(self._img("a"), moved)
+        self.assertEqual(len(a.overlay.shown), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -38,6 +38,24 @@ _ERROR_ALREADY_EXISTS = 183
 _instance_mutex = None
 
 
+def enable_dpi_awareness():
+    """声明进程 DPI 感知。
+
+    不声明的话，Windows 会把进程当成"不认识高 DPI"，给我们一套虚拟坐标
+    （2560×1600 @150% 会报成 1707×1067），并且把我们画的窗口内容拉伸 1.5 倍
+    —— 文字会糊。声明之后坐标就是物理像素，尺寸也由我们自己按 dpi_scale 控制。
+    """
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)   # PER_MONITOR_AWARE
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
 def acquire_single_instance():
     """全局互斥，防止开机自启 + 手动双击跑出两个实例。
 
@@ -121,6 +139,8 @@ class App:
         self.cfg_mtime = self._cfg_mtime()
         self.cached_img = None
         self.cached_pos = None
+        self.img_version = 0        # 每渲染一次 +1
+        self.placed_version = -1    # 已经推给窗口的版本
         self.stop = False
         self.icon = None
         self.lock = threading.Lock()
@@ -229,6 +249,7 @@ class App:
                                   dpi_scale=metrics["dpi_scale"],
                                   thresholds=self.cfg["alert_thresholds"])
         self.cached_img = img
+        self.img_version += 1
         self.place(img, metrics)
 
     def place(self, img, metrics):
@@ -241,10 +262,14 @@ class App:
         if x < min_x:
             x = min_x
 
-        if self.cached_pos == (x, y) and self.overlay.visible:
+        # 位置没变、画面也没换，才跳过重绘。
+        # 早期只看位置——位置几乎永远不变，导致电量更新全被吞掉。
+        if (self.cached_pos == (x, y) and self.overlay.visible
+                and self.placed_version == self.img_version):
             return
         self.overlay.show(img, x, y)
         self.cached_pos = (x, y)
+        self.placed_version = self.img_version
 
     def tick(self):
         """轻量轮询：只处理位置/可见性变化，不重新读设备。"""
@@ -399,6 +424,7 @@ def test_alert():
 
 def main():
     args = sys.argv[1:]
+    enable_dpi_awareness()      # 必须在建任何窗口之前
 
     try:
         if "--once" in args:
